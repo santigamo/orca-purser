@@ -12,15 +12,6 @@ const RESERVED = new Set([
 ])
 const RESERVED_PREFIXES = ['LD_', 'DYLD_', 'GIT_', 'PURSER_', 'ORCA_', 'LC_', 'XDG_']
 
-/**
- * Keys an agent CLI reads for its own login. Exporting one to every agent can silently switch
- * it from the person's subscription to pay-per-use billing, so the panel warns before that.
- */
-const AGENT_LOGIN = new Set([
-  'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_API_KEY',
-  'CODEX_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'
-])
-
 /** Values shorter than this are not searched for in output: too likely to match by chance. */
 export const MIN_REDACT_LENGTH = 6
 
@@ -46,10 +37,6 @@ export function nameProblem(name: string): string | null {
     return `${name} changes how the shell or a tool behaves, so it cannot hold a secret.`
   }
   return null
-}
-
-export function isAgentLogin(name: string): boolean {
-  return AGENT_LOGIN.has(name)
 }
 
 /** Pasted values often carry a stray newline or space; nothing inside the value is touched. */

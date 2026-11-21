@@ -21,19 +21,20 @@ agent:  purser run -- curl -H "Authorization: Bearer {{STRIPE_API_KEY}}" https:/
   environment, and replaces values (plain, base64, hex, URL-encoded) in its output.
 - **Asking.** `purser need NAME` shows a card in the panel and a desktop notification, then waits
   up to 90 s. If you take longer the ask stays open and the agent is told to run it again.
-- **Nothing to install.** `agent.launch.before` gives each agent Orca starts `$PURSER_CLI`,
-  any secret you mark "Give to every new agent", and a short set of instructions: Claude Code
+- **Nothing to install.** `agent.launch.before` gives each agent Orca starts `$PURSER_CLI`
+  and a short set of instructions: Claude Code
   through `--append-system-prompt`, Codex through `-c developer_instructions=...` (skipped when
   you already pass your own). `agent.tool.before` stops a Claude Code Bash call that reads
   `$NAME` its shell does not have, and tells it how to use `purser run` instead.
-- **Agents outside Orca (optional).** A button in the panel installs the `purser` command into
-  `~/.local/bin` and a skill into `~/.claude/skills` and `~/.agents/skills`. Remove undoes it.
+- **Agents outside Orca (optional).** The palette command "Purser: Set up agents outside Orca"
+  installs a `purser` command into `~/.local/bin` and a skill into `~/.claude/skills` and
+  `~/.agents/skills`; "Purser: Remove setup for agents outside Orca" undoes it.
 
 ## What it does not protect against
 
 Purser keeps secrets out of the chat, the transcript and the screen. It is not a sandbox: an
 agent running as your user can still run `purser run -- printenv` and transform the output
-in ways the filter does not catch. Exported secrets are in the agent's environment. Treat it as
+in ways the filter does not catch. Treat it as
 protection against accidents, not against a hostile agent.
 
 ## Develop

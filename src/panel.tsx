@@ -1,13 +1,11 @@
-// The Purser panel: paste secrets in, answer agents that are waiting, choose what new agents get.
+// The Purser panel: answer agents that are waiting, see what is stored, add one by hand.
 // No value ever comes back from the worker, so nothing here can show one.
 import {
   atom,
-  Badge,
   Box,
   Button,
   Callout,
   Code,
-  Collapsible,
   EmptyState,
   Field,
   Heading,
@@ -20,18 +18,18 @@ import {
   Separator,
   set,
   Stack,
-  Switch,
   Text,
   update,
   type PanelContext
 } from 'orca'
-import { cleanValue, isAgentLogin, nameProblem, normalizeName } from './names'
+import { cleanValue, nameProblem, normalizeName } from './names'
 import type { AskRow, PurserState, SecretRow } from './protocol'
 
 const state = atom<PurserState | null>(null)
 /** The last thing that went wrong, in words; cleared by the next success. */
 const problem = atom<string | null>(null)
 const busy = atom(false)
+const adding = atom(false)
 
 // Unkeyed on purpose: a reload or a closed panel drops anything typed into a value field.
 const newName = atom('')
@@ -58,14 +56,17 @@ async function act(run: () => Promise<PurserState>): Promise<boolean> {
   }
 }
 
+function closeForm(): void {
+  set(adding, false)
+  set(newName, '')
+  set(newValue, '')
+}
+
 async function saveNew(): Promise<void> {
   const name = normalizeName(read(newName))
   const value = cleanValue(read(newValue))
   if (nameProblem(name) || !value) return
-  if (await act(() => plugin.request('secret.save', { name, value }))) {
-    set(newName, '')
-    set(newValue, '')
-  }
+  if (await act(() => plugin.request('secret.save', { name, value }))) closeForm()
 }
 
 async function answer(ask: AskRow): Promise<void> {
@@ -89,13 +90,15 @@ function AskCard({ ask }: { ask: AskRow }) {
   return (
     <Box border="warning" radius="md" padding="sm" background="card">
       <Stack gap="sm">
-        <Row justify="between" align="center">
-          <Text weight="semibold">
-            <Code>{ask.name}</Code>
+        <Text size="sm">{`${ask.from} is waiting for`}</Text>
+        <Text weight="semibold">
+          <Code>{ask.name}</Code>
+        </Text>
+        {ask.reason ? (
+          <Text size="sm" muted>
+            {ask.reason}
           </Text>
-          <RelativeTime at={ask.at} muted />
-        </Row>
-        <Text size="sm">{`${ask.from} is waiting for it${ask.reason ? `: ${ask.reason}` : '.'}`}</Text>
+        ) : null}
         <Input
           label={`Value for ${ask.name}`}
           labelHidden
@@ -109,8 +112,8 @@ function AskCard({ ask }: { ask: AskRow }) {
           <Button variant="ghost" size="sm" disabled={read(busy)} onPress={() => act(() => plugin.request('ask.decline', { id: ask.id }))}>
             Decline
           </Button>
-          <Button tone="accent" size="sm" icon="check" disabled={!cleanValue(value) || read(busy)} onPress={() => answer(ask)}>
-            Save and continue
+          <Button tone="accent" size="sm" disabled={!cleanValue(value) || read(busy)} onPress={() => answer(ask)}>
+            Save
           </Button>
         </Row>
       </Stack>
@@ -125,139 +128,78 @@ function AddForm({ names }: { names: readonly string[] }) {
   const replacing = !nameError && names.includes(name)
   const ready = Boolean(name) && !nameError && Boolean(cleanValue(read(newValue)))
   return (
-    <Stack gap="sm">
-      <Field
-        label="Name"
-        error={nameError ?? undefined}
-        description={
-          replacing
-            ? `${name} is stored already: saving replaces its value.`
-            : typed && name !== typed
-              ? `Saved as ${name}`
-              : 'The variable name your tools expect, such as STRIPE_API_KEY.'
-        }
-      >
-        <Input label="Name" labelHidden placeholder="STRIPE_API_KEY" value={typed} invalid={Boolean(nameError)} onChange={(next) => set(newName, next)} />
-      </Field>
-      <Field label="Value">
-        <Input
-          label="Value"
-          labelHidden
-          type="password"
-          placeholder="Paste the secret"
-          value={read(newValue)}
-          onChange={(next) => set(newValue, next)}
-          onSubmit={saveNew}
-        />
-      </Field>
-      <Row justify="end">
-        <Button tone="accent" icon="add" disabled={!ready || read(busy)} onPress={saveNew}>
-          {replacing ? 'Replace' : 'Save'}
-        </Button>
-      </Row>
-    </Stack>
+    <Box border radius="md" padding="sm">
+      <Stack gap="sm">
+        <Field
+          label="Name"
+          error={nameError ?? undefined}
+          description={replacing ? `Replaces the stored ${name}.` : typed && name !== typed ? `Saved as ${name}` : undefined}
+        >
+          <Input label="Name" labelHidden placeholder="STRIPE_API_KEY" value={typed} invalid={Boolean(nameError)} onChange={(next) => set(newName, next)} />
+        </Field>
+        <Field label="Value">
+          <Input label="Value" labelHidden type="password" placeholder="Paste the secret" value={read(newValue)} onChange={(next) => set(newValue, next)} onSubmit={saveNew} />
+        </Field>
+        <Row gap="xs" justify="end">
+          <Button variant="ghost" size="sm" onPress={closeForm}>
+            Cancel
+          </Button>
+          <Button tone="accent" size="sm" disabled={!ready || read(busy)} onPress={saveNew}>
+            {replacing ? 'Replace' : 'Save'}
+          </Button>
+        </Row>
+      </Stack>
+    </Box>
   )
 }
 
 function SecretItem({ secret }: { secret: SecretRow }) {
   const confirming = read(confirmDelete) === secret.name
   return (
-    <Stack gap="xs">
-      <Row justify="between" align="center">
+    <Stack gap="none">
+      <Row justify="between" align="center" gap="sm">
         <Text weight="medium" truncate>
           <Code>{secret.name}</Code>
         </Text>
-        <Row gap="xs" align="center">
-          {confirming ? (
-            <>
-              <Button size="xs" variant="ghost" onPress={() => set(confirmDelete, null)}>
-                Keep
-              </Button>
-              <Button
-                size="xs"
-                tone="danger"
-                onPress={async () => {
-                  set(confirmDelete, null)
-                  await act(() => plugin.request('secret.delete', { name: secret.name }))
-                }}
-              >
-                Delete
-              </Button>
-            </>
-          ) : (
-            <IconButton icon="delete" label={`Delete ${secret.name}`} variant="ghost" size="xs" onPress={() => set(confirmDelete, secret.name)} />
-          )}
-        </Row>
-      </Row>
-      <Text size="xs" muted>
-        {secret.lastUsedAt ? (
-          <>
-            Used <RelativeTime at={secret.lastUsedAt} />
-          </>
+        {confirming ? (
+          <Row gap="xs">
+            <Button size="xs" variant="ghost" onPress={() => set(confirmDelete, null)}>
+              Keep
+            </Button>
+            <Button
+              size="xs"
+              tone="danger"
+              onPress={async () => {
+                set(confirmDelete, null)
+                await act(() => plugin.request('secret.delete', { name: secret.name }))
+              }}
+            >
+              Delete
+            </Button>
+          </Row>
         ) : (
-          <>
-            Saved <RelativeTime at={secret.updatedAt} />, not used yet
-          </>
+          <Row gap="xs" align="center">
+            <Text size="xs" muted>
+              {secret.lastUsedAt ? (
+                <>
+                  used <RelativeTime at={secret.lastUsedAt} />
+                </>
+              ) : (
+                <>
+                  saved <RelativeTime at={secret.updatedAt} />
+                </>
+              )}
+            </Text>
+            <IconButton icon="delete" label={`Delete ${secret.name}`} variant="ghost" size="xs" onPress={() => set(confirmDelete, secret.name)} />
+          </Row>
         )}
-      </Text>
+      </Row>
       {secret.short ? (
         <Text size="xs" tone="warning">
           Too short to hide if a command prints it.
         </Text>
       ) : null}
-      <Switch
-        label="Give to every new agent"
-        checked={secret.exported}
-        disabled={read(busy)}
-        onChange={(exported) => act(() => plugin.request('secret.export', { name: secret.name, exported }))}
-      />
-      {secret.exported && isAgentLogin(secret.name) ? (
-        <Text size="xs" tone="warning">
-          Agents read {secret.name} to log in: with it set they may bill this key instead of your subscription.
-        </Text>
-      ) : null}
     </Stack>
-  )
-}
-
-function SetupSection({ current }: { current: PurserState }) {
-  const pending = current.setup.filter((item) => item.state !== 'installed')
-  const anyInstalled = current.setup.some((item) => item.state !== 'missing')
-  return (
-    <Collapsible
-      title="Agents outside Orca"
-      description={anyInstalled ? 'Command and skill installed' : 'Optional: agents Orca starts need nothing'}
-      defaultOpen={false}
-    >
-      <Stack gap="sm">
-        <Text size="sm" muted>
-          Claude Code and Codex started from Orca already know how to use Purser. For agents you start in another terminal, install a <Code>purser</Code> command and a skill.
-        </Text>
-        {current.setup.map((item) => (
-          <Row key={item.id} justify="between" align="center" gap="sm">
-            <Stack gap="none">
-              <Text size="sm">{item.label}</Text>
-              <Text size="xs" muted truncate>
-                {item.path.replace(/^\/(Users|home)\/[^/]+/, '~')}
-              </Text>
-            </Stack>
-            <Badge tone={item.state === 'installed' ? 'success' : item.state === 'outdated' ? 'warning' : 'neutral'}>
-              {item.state === 'installed' ? 'Installed' : item.state === 'outdated' ? 'Outdated' : 'Not installed'}
-            </Badge>
-          </Row>
-        ))}
-        <Row gap="xs" justify="end">
-          {anyInstalled ? (
-            <Button variant="ghost" size="sm" disabled={read(busy)} onPress={() => act(() => plugin.request('setup.remove'))}>
-              Remove
-            </Button>
-          ) : null}
-          <Button size="sm" icon="download" disabled={!pending.length || read(busy)} onPress={() => act(() => plugin.request('setup.install'))}>
-            {anyInstalled && pending.length ? 'Update' : 'Install'}
-          </Button>
-        </Row>
-      </Stack>
-    </Collapsible>
   )
 }
 
@@ -273,24 +215,31 @@ export default function Panel() {
       <Text muted>Loading…</Text>
     )
   }
-  const names = current.secrets.map((secret) => secret.name)
+  const isAdding = read(adding)
+  const canStore = current.protection !== 'unavailable'
   return (
     <Stack gap="md">
       <Row justify="between" align="center">
         <Heading level={2}>Purser</Heading>
-        <Badge tone={current.protection === 'os-keyring' ? 'success' : 'danger'}>
-          {current.protection === 'os-keyring' ? 'Encrypted' : 'No key store'}
-        </Badge>
+        {canStore ? (
+          <IconButton
+            icon={isAdding ? 'close' : 'add'}
+            label={isAdding ? 'Cancel' : 'Add a secret'}
+            tooltip={isAdding ? 'Cancel' : 'Add a secret'}
+            variant="ghost"
+            onPress={() => (isAdding ? closeForm() : set(adding, true))}
+          />
+        ) : null}
       </Row>
 
-      {current.protection === 'unavailable' ? (
+      {!canStore ? (
         <Callout tone="danger" title="Secrets cannot be saved here" icon="warning">
           <Text size="sm">This machine has no OS key store for Orca to encrypt them with.</Text>
         </Callout>
       ) : null}
       {!current.serving ? (
-        <Callout tone="warning" title="The purser command cannot reach this panel" icon="warning">
-          <Text size="sm">Another Orca window may be serving it. Restart the plugin from Settings → Plugins if agents report it unreachable.</Text>
+        <Callout tone="warning" title="Agents cannot reach Purser" icon="warning">
+          <Text size="sm">Restart the plugin from Settings → Plugins.</Text>
         </Callout>
       ) : null}
       {error ? (
@@ -299,36 +248,32 @@ export default function Panel() {
         </Callout>
       ) : null}
 
-      {current.asks.length ? (
-        <Stack gap="sm">
-          <Text weight="semibold" tone="warning">
-            Waiting for you
-          </Text>
-          {current.asks.map((ask) => (
-            <AskCard key={ask.id} ask={ask} />
-          ))}
-        </Stack>
-      ) : null}
+      {current.asks.map((ask) => (
+        <AskCard key={ask.id} ask={ask} />
+      ))}
 
-      <AddForm names={names} />
-      <Separator />
+      {isAdding ? <AddForm names={current.secrets.map((secret) => secret.name)} /> : null}
 
       {current.secrets.length ? (
-        <Stack gap="md">
+        <Stack gap="sm">
+          {current.asks.length || isAdding ? <Separator /> : null}
           {current.secrets.map((secret) => (
             <SecretItem key={secret.name} secret={secret} />
           ))}
         </Stack>
-      ) : (
+      ) : !current.asks.length && !isAdding ? (
         <EmptyState
           icon="package"
           title="No secrets yet"
-          description="Paste one above, or let an agent ask: it runs purser need NAME and the request shows up here."
-        />
-      )}
-
-      <Separator />
-      <SetupSection current={current} />
+          description="When an agent needs an API key, it asks here and you paste it. Agents use it by name and never see the value."
+        >
+          {canStore ? (
+            <Button size="sm" icon="add" onPress={() => set(adding, true)}>
+              Add one now
+            </Button>
+          ) : null}
+        </EmptyState>
+      ) : null}
     </Stack>
   )
 }

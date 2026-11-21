@@ -7,8 +7,6 @@ export type SecretRow = {
   createdAt: number
   updatedAt: number
   lastUsedAt: number | null
-  /** Also put in the environment of every agent Orca starts from now on. */
-  exported: boolean
   /** Too short to find and hide in command output. */
   short: boolean
 }
@@ -23,7 +21,7 @@ export type AskRow = {
   at: number
 }
 
-/** One file Purser can write outside the plugin so agents find it. */
+/** One file Purser can write for agents started outside Orca. */
 export type SetupItem = {
   id: 'cli' | 'skill-claude' | 'skill-agents'
   label: string
@@ -36,7 +34,6 @@ export type PurserState = {
   protection: 'os-keyring' | 'unavailable'
   secrets: SecretRow[]
   asks: AskRow[]
-  setup: SetupItem[]
   /** Whether the local socket the `purser` command talks to is up. */
   serving: boolean
 }
@@ -46,10 +43,7 @@ declare module 'orca' {
     'state.get': { output: PurserState }
     'secret.save': { input: { name: string; value: string }; output: PurserState }
     'secret.delete': { input: { name: string }; output: PurserState }
-    'secret.export': { input: { name: string; exported: boolean }; output: PurserState }
     'ask.decline': { input: { id: string }; output: PurserState }
-    'setup.install': { output: PurserState }
-    'setup.remove': { output: PurserState }
   }
   interface PluginPanelEvents {
     /** Posted to every open panel after anything in the state changes. */

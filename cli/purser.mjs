@@ -181,11 +181,7 @@ async function list(io) {
     io.out('No secrets stored. Ask for one with: purser need NAME "why you need it"\n')
   } else {
     for (const secret of secrets) {
-      const notes = [
-        secret.exported ? 'also in the environment of new agents' : '',
-        secret.short ? 'too short to hide in output' : ''
-      ].filter(Boolean)
-      io.out(`${secret.name}${notes.length ? `  (${notes.join('; ')})` : ''}\n`)
+      io.out(`${secret.name}${secret.short ? '  (too short to hide in output)' : ''}\n`)
     }
     io.out('\nUse one with: purser run -- <command with {{NAME}} or $NAME>\n')
   }

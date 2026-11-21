@@ -7,7 +7,7 @@ import { withInstructions } from './launch'
 import { cleanValue, nameProblem, normalizeName, referencesName } from './names'
 import type { AskRow, PurserState } from './protocol'
 import { serve, stop, type Request } from './server'
-import { installSetup, launcherPath, refreshLauncher, removeSetup, setupState, socketPath } from './setup'
+import { home, installSetup, launcherPath, refreshLauncher, removeSetup, setupState, socketPath } from './setup'
 import { Store } from './store'
 
 type Ask = AskRow & { settle: Set<(outcome: 'provided' | 'declined') => void> }
@@ -34,7 +34,6 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       protection,
       secrets: store.rows(),
       asks: [...asks.values()].map(({ settle: _settle, ...row }) => row).sort((a, b) => a.at - b.at),
-      setup: await setupState(),
       serving: server !== null
     }
   }
@@ -91,25 +90,21 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     return changed()
   })
 
-  orca.panels.handle('secret.export', async ({ name, exported }) => {
-    await store.setExported(normalizeName(name), exported === true)
-    return changed()
-  })
-
   orca.panels.handle('ask.decline', async ({ id }) => {
     const ask = asks.get(id)
     if (ask) settleAsks(ask.name, 'declined')
     return changed()
   })
 
-  orca.panels.handle('setup.install', async () => {
+  orca.commands.register('purser.setupOutside', async () => {
     await installSetup()
-    return changed()
+    const items = await setupState()
+    return `Installed: ${items.map((item) => item.path.replace(home(), '~')).join(', ')}. Agents you start outside Orca can now use purser.`
   })
 
-  orca.panels.handle('setup.remove', async () => {
+  orca.commands.register('purser.removeOutside', async () => {
     await removeSetup()
-    return changed()
+    return 'Removed the purser command and skill installed for agents outside Orca. Agents Orca starts keep working.'
   })
 
   orca.commands.register('purser.status', async () => {
@@ -128,7 +123,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     await store.ready()
     if (request.op === 'list') {
       return {
-        secrets: store.rows().map(({ name, exported, short }) => ({ name, exported, short })),
+        secrets: store.rows().map(({ name, short }) => ({ name, short })),
         waiting: [...asks.values()].map((ask) => ask.name)
       }
     }
@@ -175,14 +170,13 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
 
   // --- Hooks ---------------------------------------------------------------------------------
 
-  // New agents get the secrets marked "export", where the command lives, and how to use it, so
-  // nothing has to be installed for agents Orca starts. Reads memory only: a launch must never
-  // wait on the key store.
+  // New agents get where the command lives and how to use it, so nothing has to be installed
+  // for agents Orca starts. No secret value goes into an agent's environment.
   orca.hooks.on('agent.launch.before', (event, next) =>
     next({
       ...event,
       command: withInstructions(event.agent, event.command),
-      env: { ...event.env, ...store.exportedValues(), PURSER_CLI: launcherPath() }
+      env: { ...event.env, PURSER_CLI: launcherPath() }
     })
   )
 
@@ -194,7 +188,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     const command = Array.isArray(input?.command) ? input.command.join(' ') : input?.command
     // Already going through Purser: by name, by the full path, or by $PURSER_CLI.
     if (typeof command !== 'string' || /(^|[\s/;&|("'])purser["']?(\s|$)|\$\{?PURSER_CLI\b/.test(command)) return
-    const name = store.names().find((entry) => !store.isExported(entry) && referencesName(command, entry))
+    const name = store.names().find((entry) => referencesName(command, entry))
     if (!name) return
     return {
       deny:

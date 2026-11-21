@@ -10,6 +10,7 @@ import { main as cli } from '../cli/purser.mjs'
 
 const CAPABILITIES = ['secrets:own', 'storage:own', 'notifications:show']
 const HOOKS = ['agent.launch.before', 'agent.tool.before']
+const COMMANDS = ['purser.status', 'purser.setupOutside', 'purser.removeOutside']
 const TOKEN = 'sk_test_51Habc0123456789xyz'
 
 let home = ''
@@ -29,7 +30,7 @@ async function start(secrets: Record<string, string> = {}, index: Record<string,
     storage: Object.keys(index).length ? { index: index as never } : {},
     results: { 'secrets.protection': { status: 'os-keyring' } }
   })
-  const worker = await mountWorker(main, { host, hooks: HOOKS })
+  const worker = await mountWorker(main, { host, hooks: HOOKS, commands: COMMANDS })
   return { host, worker }
 }
 
@@ -46,7 +47,7 @@ function io(env: Record<string, string | undefined> = {}) {
   }
 }
 
-const meta = (exported = false) => ({ createdAt: 1, updatedAt: 1, lastUsedAt: null, exported, short: false })
+const meta = () => ({ createdAt: 1, updatedAt: 1, lastUsedAt: null, short: false })
 
 test('the panel saves a secret, lists it by name only, and deletes it', async () => {
   const { host, worker } = await start()
@@ -69,10 +70,10 @@ test('names that steer the shell are refused', async () => {
   await worker.deactivate()
 })
 
-test('new agents get exported secrets and the command path, nothing else', async () => {
+test('new agents get the command path and instructions, never a secret value', async () => {
   const { worker } = await start(
     { 'secret:NPM_TOKEN': 'npm_abcdef123456', 'secret:STRIPE_API_KEY': TOKEN },
-    { NPM_TOKEN: meta(true), STRIPE_API_KEY: meta(false) }
+    { NPM_TOKEN: meta(), STRIPE_API_KEY: meta() }
   )
   const decision = await worker.hooks.fire('agent.launch.before', {
     agent: 'claude',
@@ -84,7 +85,7 @@ test('new agents get exported secrets and the command path, nothing else', async
   assert.equal(decision.kind, 'continue')
   const env = decision.kind === 'continue' ? decision.event.env : {}
   assert.equal(env.KEEP, '1')
-  assert.equal(env.NPM_TOKEN, 'npm_abcdef123456')
+  assert.equal(env.NPM_TOKEN, undefined)
   assert.equal(env.STRIPE_API_KEY, undefined)
   assert.equal(env.PURSER_CLI, join(home, '.purser', 'bin', 'purser'))
   assert.match(decision.kind === 'continue' ? decision.event.command : '', /^claude --append-system-prompt '.*PURSER_CLI/)
@@ -92,7 +93,7 @@ test('new agents get exported secrets and the command path, nothing else', async
 })
 
 test('a Bash call that reads a secret its shell lacks is turned back with how to run it', async () => {
-  const { worker } = await start({ 'secret:STRIPE_API_KEY': TOKEN }, { STRIPE_API_KEY: meta(false) })
+  const { worker } = await start({ 'secret:STRIPE_API_KEY': TOKEN }, { STRIPE_API_KEY: meta() })
   const fire = (command: string, tool = 'Bash') =>
     worker.hooks.fire('agent.tool.before', { agent: 'claude', workspaceId: 'w1', tool, input: { command } })
 
@@ -186,16 +187,22 @@ test('without Orca the command says what to do', async () => {
   assert.match(runner.stderr(), /open Orca/)
 })
 
-test('setup writes the command and both skills, and removes them', async () => {
+test('the palette commands set up and remove agents outside Orca', async () => {
   const { worker } = await start()
-  const before = await worker.request('state.get')
-  assert.deepEqual(before.setup.map((item) => item.state), ['missing', 'missing', 'missing'])
-  const after = await worker.request('setup.install')
-  assert.deepEqual(after.setup.map((item) => item.state), ['installed', 'installed', 'installed'])
+  assert.match(String(await worker.command('purser.setupOutside')), /Installed: ~\/\.local\/bin\/purser/)
   assert.match(await readFile(join(home, '.claude', 'skills', 'purser', 'SKILL.md'), 'utf8'), /name: purser/)
+  assert.match(await readFile(join(home, '.agents', 'skills', 'purser', 'SKILL.md'), 'utf8'), /name: purser/)
   assert.equal((await stat(join(home, '.local', 'bin', 'purser'))).mode & 0o111, 0o111)
-  const removed = await worker.request('setup.remove')
-  assert.deepEqual(removed.setup.map((item) => item.state), ['missing', 'missing', 'missing'])
+  await worker.command('purser.removeOutside')
+  await assert.rejects(stat(join(home, '.claude', 'skills', 'purser')))
+  await assert.rejects(stat(join(home, '.local', 'bin', 'purser')))
+  await worker.deactivate()
+})
+
+test('rows saved by 0.1.0 with an export flag still load', async () => {
+  const { worker } = await start({ 'secret:OLD_TOKEN': 'old_token_value' }, { OLD_TOKEN: { ...meta(), exported: true } })
+  const { secrets } = await worker.request('state.get')
+  assert.deepEqual(Object.keys(secrets[0]).sort(), ['createdAt', 'lastUsedAt', 'name', 'short', 'updatedAt'])
   await worker.deactivate()
 })
 

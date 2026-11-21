@@ -11,7 +11,7 @@ const secretKey = (name: string): string => `secret:${name}`
 
 export class Store {
   private index: Record<string, Meta> = {}
-  /** Values read so far. Hooks have 2 s to answer, so they must not wait on the key store. */
+  /** Values read so far, so a busy `purser run` loop does not hit the key store each time. */
   private readonly cache = new Map<string, string>()
   private readonly loading: Promise<void>
 
@@ -22,14 +22,12 @@ export class Store {
   private async load(): Promise<void> {
     const stored = await this.orca.storage.get(INDEX)
     if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-      this.index = stored as unknown as Record<string, Meta>
+      // Rows from 0.1.0 also carry `exported`; it is dropped here and on the next write.
+      for (const [name, row] of Object.entries(stored as Record<string, Meta & { exported?: unknown }>)) {
+        const { exported: _dropped, ...meta } = row
+        this.index[name] = meta
+      }
     }
-    // Exported values are needed inside the launch hook: read them ahead of the first launch.
-    await Promise.all(
-      this.names()
-        .filter((name) => this.index[name].exported)
-        .map((name) => this.value(name).catch(() => null))
-    )
   }
 
   ready(): Promise<void> {
@@ -43,10 +41,6 @@ export class Store {
 
   has(name: string): boolean {
     return Object.hasOwn(this.index, name)
-  }
-
-  isExported(name: string): boolean {
-    return this.index[name]?.exported === true
   }
 
   rows(): SecretRow[] {
@@ -63,7 +57,6 @@ export class Store {
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,
       lastUsedAt: previous?.lastUsedAt ?? null,
-      exported: previous?.exported ?? false,
       short: value.length < MIN_REDACT_LENGTH
     }
     await this.writeIndex()
@@ -74,14 +67,6 @@ export class Store {
     await this.orca.secrets.delete(secretKey(name))
     this.cache.delete(name)
     delete this.index[name]
-    await this.writeIndex()
-  }
-
-  async setExported(name: string, exported: boolean): Promise<void> {
-    await this.loading
-    if (!this.has(name)) return
-    if (exported) await this.value(name)
-    this.index[name] = { ...this.index[name], exported }
     await this.writeIndex()
   }
 
@@ -105,16 +90,6 @@ export class Store {
       else values[name] = value
     }
     return { values, missing }
-  }
-
-  /** What the launch hook adds to an agent's environment. Reads memory only. */
-  exportedValues(): Record<string, string> {
-    const values: Record<string, string> = {}
-    for (const name of this.names()) {
-      const value = this.cache.get(name)
-      if (this.index[name].exported && value !== undefined) values[name] = value
-    }
-    return values
   }
 
   async markUsed(names: readonly string[]): Promise<void> {

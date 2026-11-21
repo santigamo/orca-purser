@@ -7,15 +7,10 @@ const empty: PurserState = {
   protection: 'os-keyring',
   secrets: [],
   asks: [],
-  setup: [
-    { id: 'cli', label: 'purser command', path: '/Users/me/.local/bin/purser', state: 'missing' },
-    { id: 'skill-claude', label: 'Skill for Claude Code', path: '/Users/me/.claude/skills/purser/SKILL.md', state: 'missing' },
-    { id: 'skill-agents', label: 'Skill for Codex and other agents', path: '/Users/me/.agents/skills/purser/SKILL.md', state: 'missing' }
-  ],
   serving: true
 }
 
-const row = (name: string) => ({ name, createdAt: 1, updatedAt: 1, lastUsedAt: null, exported: false, short: false })
+const row = (name: string) => ({ name, createdAt: 1, updatedAt: 1, lastUsedAt: null, short: false })
 
 test('adds a secret under the name tools expect and clears the value field', async () => {
   const saved: { name: string; value: string }[] = []
@@ -31,14 +26,16 @@ test('adds a secret under the name tools expect and clears the value field', asy
     }
   })
   const view = await mount(panel, { host })
-  assert.match(view.summary().join("\n"), /No secrets yet/)
+  assert.match(view.summary().join('\n'), /No secrets yet/)
+  assert.equal(view.find({ label: 'Name' }), null, 'the form stays hidden until asked for')
 
+  await view.press({ label: 'Add a secret' })
   await view.type({ label: 'Name' }, 'stripe api key')
   assert.ok(view.find({ text: 'Saved as STRIPE_API_KEY' }))
   await view.type({ label: 'Value' }, 'sk_test_123456', { submit: true })
 
   assert.deepEqual(saved, [{ name: 'STRIPE_API_KEY', value: 'sk_test_123456' }])
-  assert.equal(view.valueOf({ label: 'Value' }), '')
+  assert.equal(view.find({ label: 'Value' }), null, 'the form closes after saving')
   assert.ok(view.find({ text: 'STRIPE_API_KEY' }))
   assert.deepEqual(view.errors, [])
   await view.unmount()
@@ -61,9 +58,10 @@ test('shows a waiting agent first and answers it', async () => {
     }
   })
   const view = await mount(panel, { host })
-  assert.ok(view.find({ text: /Codex in api is waiting for it: to run the evals/ }))
+  assert.ok(view.find({ text: 'Codex in api is waiting for' }))
+  assert.ok(view.find({ text: 'to run the evals' }))
   await view.type({ label: 'Value for OPENAI_API_KEY' }, 'sk-proj-abcdef')
-  await view.press({ text: 'Save and continue' })
+  await view.press({ text: 'Save' })
   assert.deepEqual(saved, [{ name: 'OPENAI_API_KEY', value: 'sk-proj-abcdef' }])
   assert.equal(view.find({ text: 'Waiting for you' }), null)
   await view.unmount()
@@ -90,9 +88,12 @@ test('a delete needs a second press', async () => {
   await view.unmount()
 })
 
-test('warns before an agent login key goes to every agent', async () => {
-  const current: PurserState = { ...empty, secrets: [{ ...row('ANTHROPIC_API_KEY'), exported: true }] }
+test('the list shows names only, and when each was last used', async () => {
+  const current: PurserState = { ...empty, secrets: [{ ...row('NPM_TOKEN'), lastUsedAt: Date.now() - 60_000 }] }
   const view = await mount(panel, { host: mockHost({ requests: { 'state.get': () => current } }) })
-  assert.ok(view.find({ text: /bill this key instead of your subscription/ }))
+  assert.ok(view.find({ text: 'NPM_TOKEN' }))
+  assert.ok(view.find({ text: /used/ }))
+  assert.equal(view.find({ label: 'Name' }), null)
+  assert.deepEqual(view.errors, [])
   await view.unmount()
 })

@@ -26,6 +26,14 @@
       {
         "id": "purser.status",
         "title": "Purser: Show what is stored and what agents are waiting for"
+      },
+      {
+        "id": "purser.setupOutside",
+        "title": "Purser: Set up agents outside Orca"
+      },
+      {
+        "id": "purser.removeOutside",
+        "title": "Purser: Remove setup for agents outside Orca"
       }
     ],
     "statusBarItems": [
