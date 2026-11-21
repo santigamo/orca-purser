@@ -1,0 +1,12 @@
+#!/bin/sh
+# Runs the purser command with this machine's Node, or with Orca's own when there is none.
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cli="$here/../cli/purser.mjs"
+if command -v node >/dev/null 2>&1; then
+  exec node "$cli" "$@"
+fi
+if [ -n "${PURSER_NODE:-}" ] && [ -x "$PURSER_NODE" ]; then
+  ELECTRON_RUN_AS_NODE=1 exec "$PURSER_NODE" "$cli" "$@"
+fi
+echo "purser: no Node.js found. Install Node, or run purser from the launcher Orca writes at ~/.purser/bin/purser." >&2
+exit 127

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
+  "manifestVersion": 2,
+  "id": "purser",
+  "name": "Purser",
+  "version": "0.1.0",
+  "description": "Paste API keys into a masked field instead of the chat. Your agents use them by name and never see the values.",
+  "license": "MIT",
+  "engines": {
+    "orca": ">=1.4.248"
+  },
+  "execution": "trusted-worker",
+  "pluginApi": 1,
+  "main": "src/worker.ts",
+  "contributes": {
+    "panels": [
+      {
+        "id": "purser",
+        "title": "Purser",
+        "icon": "package",
+        "entry": "src/panel.tsx",
+        "ui": "components"
+      }
+    ],
+    "commands": [
+      {
+        "id": "purser.status",
+        "title": "Purser: Show what is stored and what agents are waiting for"
+      }
+    ],
+    "statusBarItems": [
+      {
+        "id": "purser",
+        "text": "Purser",
+        "icon": "package",
+        "tooltip": "Purser: secrets for your agents",
+        "command": "purser.status"
+      }
+    ],
+    "hooks": [
+      {
+        "event": "agent.launch.before"
+      },
+      {
+        "event": "agent.tool.before"
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "kind": "secrets:own"
+    },
+    {
+      "kind": "storage:own"
+    },
+    {
+      "kind": "notifications:show"
+    }
+  ],
+  "author": {
+    "name": "Santi Gamo",
+    "url": "https://github.com/santigamo"
+  }
+}
