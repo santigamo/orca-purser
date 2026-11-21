@@ -5,10 +5,11 @@ import type { Server } from 'node:net'
 import type { OrcaWorkerApi } from 'orca/worker'
 import { withInstructions } from './launch'
 import { cleanValue, nameProblem, normalizeName, referencesName } from './names'
-import type { AskRow, PurserState } from './protocol'
+import type { AskRow, Project, PurserState } from './protocol'
 import { serve, stop, type Request } from './server'
 import { home, installSetup, launcherPath, refreshLauncher, removeSetup, setupState, socketPath } from './setup'
 import { Store } from './store'
+import { projectOf } from '../cli/project.mjs'
 
 type Ask = AskRow & { settle: Set<(outcome: 'provided' | 'declined') => void> }
 
@@ -21,12 +22,21 @@ function invalid(message: string): Error {
   return Object.assign(new Error(message), { code: 'invalid_params' })
 }
 
+/** A project as a caller sent it, checked: an absolute folder and a short name. */
+function checkedProject(raw: unknown): Project | null {
+  if (!raw || typeof raw !== 'object') return null
+  const { key, name } = raw as Record<string, unknown>
+  if (typeof key !== 'string' || !key.startsWith('/') || key.length > 4096) return null
+  return { key, name: typeof name === 'string' && name ? name.slice(0, 120) : key.split('/').pop() || key }
+}
+
 export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   const store = new Store(orca)
   const asks = new Map<string, Ask>()
   const socket = socketPath()
   let server: Server | null = null
   let protection: PurserState['protection'] = 'os-keyring'
+  let currentProject: Project | null = null
 
   async function state(): Promise<PurserState> {
     await store.ready()
@@ -34,6 +44,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       protection,
       secrets: store.rows(),
       asks: [...asks.values()].map(({ settle: _settle, ...row }) => row).sort((a, b) => a.at - b.at),
+      currentProject,
       serving: server !== null
     }
   }
@@ -56,11 +67,17 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     return next
   }
 
-  function settleAsks(name: string, outcome: 'provided' | 'declined'): void {
-    for (const [id, ask] of asks) {
-      if (ask.name !== name) continue
-      asks.delete(id)
-      for (const settle of ask.settle) settle(outcome)
+  function settle(id: string, outcome: 'provided' | 'declined'): void {
+    const ask = asks.get(id)
+    if (!ask) return
+    asks.delete(id)
+    for (const done of ask.settle) done(outcome)
+  }
+
+  /** Every ask that a stored secret now answers, in the project it was asked from. */
+  function settleAnswered(): void {
+    for (const ask of [...asks.values()]) {
+      if (store.resolve(ask.name, ask.project)) settle(ask.id, 'provided')
     }
   }
 
@@ -75,24 +92,36 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
 
   orca.panels.handle('state.get', () => state())
 
-  orca.panels.handle('secret.save', async ({ name: rawName, value: rawValue }) => {
+  orca.panels.handle('secret.save', async ({ name: rawName, value: rawValue, project }) => {
     const name = checkedName(rawName)
     const value = cleanValue(typeof rawValue === 'string' ? rawValue : '')
     if (!value) throw invalid('Paste the value to store.')
     if (protection === 'unavailable') throw invalid('This machine has no key store to protect secrets with.')
-    await store.save(name, value)
-    settleAsks(name, 'provided')
+    await store.save(name, checkedProject(project), value)
+    settleAnswered()
     return changed()
   })
 
-  orca.panels.handle('secret.delete', async ({ name }) => {
-    await store.delete(normalizeName(name))
+  orca.panels.handle('secret.update', async ({ id, value: rawValue, project }) => {
+    const value = rawValue === undefined ? undefined : cleanValue(String(rawValue))
+    if (value === '') throw invalid('Paste the new value, or leave the field empty to keep the current one.')
+    await store.update(String(id), {
+      value,
+      project: project === undefined ? undefined : checkedProject(project)
+    }).catch((error: unknown) => {
+      throw invalid(error instanceof Error ? error.message : String(error))
+    })
+    settleAnswered()
+    return changed()
+  })
+
+  orca.panels.handle('secret.delete', async ({ id }) => {
+    await store.delete(String(id))
     return changed()
   })
 
   orca.panels.handle('ask.decline', async ({ id }) => {
-    const ask = asks.get(id)
-    if (ask) settleAsks(ask.name, 'declined')
+    settle(String(id), 'declined')
     return changed()
   })
 
@@ -121,9 +150,11 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
 
   async function handle(request: Request, { signal }: { signal: AbortSignal }): Promise<Record<string, unknown>> {
     await store.ready()
+    const project = checkedProject(request.project)
     if (request.op === 'list') {
       return {
-        secrets: store.rows().map(({ name, short }) => ({ name, short })),
+        project,
+        secrets: store.visible(project).map(({ name, short, project: owner }) => ({ name, short, project: owner?.name ?? null })),
         waiting: [...asks.values()].map((ask) => ask.name)
       }
     }
@@ -131,19 +162,19 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       const wanted = Array.isArray(request.names)
         ? request.names.filter((name): name is string => typeof name === 'string')
         : undefined
-      const result = await store.valuesOf(wanted)
-      void store.markUsed(Object.keys(result.values)).then(changed, () => undefined)
-      return result
+      const { values, missing, ids } = await store.valuesFor(project, wanted)
+      void store.markUsed(ids).then(changed, () => undefined)
+      return { values, missing }
     }
     if (request.op === 'need') {
       const name = checkedName(request.name)
-      if (store.has(name)) return { status: 'available' }
+      if (store.resolve(name, project)) return { status: 'available' }
       if (protection === 'unavailable') throw new Error('this machine has no key store, so Purser cannot store secrets')
-      let ask = [...asks.values()].find((entry) => entry.name === name)
+      let ask = [...asks.values()].find((entry) => entry.name === name && entry.project?.key === project?.key)
       if (!ask) {
         const reason = typeof request.reason === 'string' ? request.reason.slice(0, 300) : ''
         const from = typeof request.from === 'string' && request.from ? request.from.slice(0, 80) : 'An agent'
-        ask = { id: randomUUID(), name, reason, from, at: Date.now(), settle: new Set() }
+        ask = { id: randomUUID(), name, reason, from, project, at: Date.now(), settle: new Set() }
         asks.set(ask.id, ask)
         void orca.host
           .call('notifications.show', {
@@ -156,10 +187,10 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       const waitingOn = ask
       // The request outlives this connection: if the command line gives up, the panel still asks.
       const outcome = await new Promise<'provided' | 'declined' | 'gone'>((resolve) => {
-        const settle = (result: 'provided' | 'declined'): void => resolve(result)
-        waitingOn.settle.add(settle)
+        const done = (result: 'provided' | 'declined'): void => resolve(result)
+        waitingOn.settle.add(done)
         signal.addEventListener('abort', () => {
-          waitingOn.settle.delete(settle)
+          waitingOn.settle.delete(done)
           resolve('gone')
         })
       })
@@ -200,6 +231,19 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     }
   })
 
+  // The panel groups secrets around the project of the focused workspace.
+  orca.events.on('workspace.changed', async ({ context }) => {
+    let next: Project | null = null
+    if (context?.workspaceId) {
+      const { workspaces } = await orca.host.call('workspace.list').catch(() => ({ workspaces: [] }))
+      const focused = workspaces.find((row) => row.id === context.workspaceId)
+      if (focused?.path && (focused.hostId === 'local' || focused.hostId === null)) next = projectOf(focused.path)
+    }
+    if (next?.key === currentProject?.key) return
+    currentProject = next
+    await changed()
+  })
+
   // --- Start -----------------------------------------------------------------------------------
 
   protection = await orca.host
@@ -216,7 +260,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   void changed().catch(() => undefined)
 
   shutdown = async () => {
-    for (const ask of asks.values()) for (const settle of ask.settle) settle('declined')
+    for (const ask of asks.values()) for (const done of ask.settle) done('declined')
     asks.clear()
     await stop(server, socket)
     server = null

@@ -13,6 +13,15 @@ agent:  purser run -- curl -H "Authorization: Bearer {{STRIPE_API_KEY}}" https:/
 
 ## How it works
 
+- **Per project.** A secret is stored for one project (a Git repository, all its worktrees
+  included) or for all of them. In a project, its own secrets win over global ones of the same
+  name, so `STRIPE_API_KEY` can hold a different key for each client, and an agent working on one
+  client's repo never gets another client's key. What an agent asks for is stored in its project
+  unless you choose "All projects".
+- **Panel.** Waiting agents first, then the stored secrets grouped by project. Each one can be
+  shown for 10 seconds (read by the panel itself; the worker never hands out values), edited
+  (new value, or moved to another project) or deleted.
+
 - **Storage.** Values live in Orca's encrypted plugin secrets, protected by your OS key store
   (macOS Keychain, libsecret, DPAPI). Names and timestamps live in plugin storage. No request to
   the plugin ever returns a value to the panel.
@@ -32,7 +41,8 @@ agent:  purser run -- curl -H "Authorization: Bearer {{STRIPE_API_KEY}}" https:/
 
 ## What it does not protect against
 
-Purser keeps secrets out of the chat, the transcript and the screen. It is not a sandbox: an
+Purser keeps secrets out of the chat and the transcript, and on screen only while you ask to see
+one. It is not a sandbox: an
 agent running as your user can still run `purser run -- printenv` and transform the output
 in ways the filter does not catch. Treat it as
 protection against accidents, not against a hostile agent.

@@ -52,6 +52,11 @@
       {
         "event": "agent.tool.before"
       }
+    ],
+    "events": [
+      {
+        "on": "workspace.changed"
+      }
     ]
   },
   "capabilities": [
@@ -63,6 +68,9 @@
     },
     {
       "kind": "notifications:show"
+    },
+    {
+      "kind": "workspace:read"
     }
   ],
   "author": {

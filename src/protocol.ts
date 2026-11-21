@@ -1,9 +1,19 @@
 // The panel <-> worker contract, declared once: src/panel.tsx and src/worker.ts both read it.
-// No request ever answers with a secret's value: the panel can write one, nothing reads it back.
+// No request ever answers with a secret's value. The panel reads one itself, from the encrypted
+// store, only while the person asks to see it.
+
+/** A Git repository; its worktrees are the same project. `key` is the repository's folder. */
+export type Project = { key: string; name: string }
 
 /** One stored secret, as the panel lists it. */
 export type SecretRow = {
+  /** Unique: the same name can be stored once globally and once per project. */
+  id: string
   name: string
+  /** null: usable in every project. */
+  project: Project | null
+  /** Where the value sits in the plugin's encrypted secrets, for the panel's "show". */
+  storageKey: string
   createdAt: number
   updatedAt: number
   lastUsedAt: number | null
@@ -18,6 +28,8 @@ export type AskRow = {
   reason: string
   /** Who asks, as far as the command line could tell: "Claude Code in my-repo". */
   from: string
+  /** The project the agent works in, where the answer is stored by default. */
+  project: Project | null
   at: number
 }
 
@@ -34,6 +46,8 @@ export type PurserState = {
   protection: 'os-keyring' | 'unavailable'
   secrets: SecretRow[]
   asks: AskRow[]
+  /** The project of the workspace focused in Orca, if it is in a Git repository. */
+  currentProject: Project | null
   /** Whether the local socket the `purser` command talks to is up. */
   serving: boolean
 }
@@ -41,8 +55,10 @@ export type PurserState = {
 declare module 'orca' {
   interface PluginRequests {
     'state.get': { output: PurserState }
-    'secret.save': { input: { name: string; value: string }; output: PurserState }
-    'secret.delete': { input: { name: string }; output: PurserState }
+    'secret.save': { input: { name: string; value: string; project: Project | null }; output: PurserState }
+    /** Leave `value` out to keep it; leave `project` out to keep where it is. */
+    'secret.update': { input: { id: string; value?: string; project?: Project | null }; output: PurserState }
+    'secret.delete': { input: { id: string }; output: PurserState }
     'ask.decline': { input: { id: string }; output: PurserState }
   }
   interface PluginPanelEvents {

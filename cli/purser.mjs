@@ -9,6 +9,7 @@ import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
+import { projectOf } from './project.mjs'
 
 /** Values shorter than this are not searched for in output: too likely to match by chance. */
 const MIN_REDACT_LENGTH = 6
@@ -176,12 +177,13 @@ function describeCaller(env, cwd) {
 }
 
 async function list(io) {
-  const { secrets, waiting } = await ask({ op: 'list' }, io.env)
+  const { secrets, waiting } = await ask({ op: 'list', project: projectOf(io.cwd) }, io.env)
   if (!secrets.length) {
     io.out('No secrets stored. Ask for one with: purser need NAME "why you need it"\n')
   } else {
     for (const secret of secrets) {
-      io.out(`${secret.name}${secret.short ? '  (too short to hide in output)' : ''}\n`)
+      const notes = [secret.project ? `only in ${secret.project}` : '', secret.short ? 'too short to hide in output' : ''].filter(Boolean)
+      io.out(`${secret.name}${notes.length ? `  (${notes.join('; ')})` : ''}\n`)
     }
     io.out('\nUse one with: purser run -- <command with {{NAME}} or $NAME>\n')
   }
@@ -204,7 +206,7 @@ async function need(argv, io) {
   }, seconds * 1000)
   try {
     const answer = await ask(
-      { op: 'need', name, reason: why.join(' '), from: describeCaller(io.env, io.cwd) },
+      { op: 'need', name, reason: why.join(' '), from: describeCaller(io.env, io.cwd), project: projectOf(io.cwd) },
       io.env,
       (close) => {
         hangUp = close
@@ -238,7 +240,7 @@ async function run(argv, io) {
     io.err(`purser: ${parsed.error}\n`)
     return EXIT.usage
   }
-  const { values, missing } = await ask({ op: 'env', names: parsed.only }, io.env)
+  const { values, missing } = await ask({ op: 'env', names: parsed.only, project: projectOf(io.cwd) }, io.env)
   const substituted = substitute(parsed.command, values)
   const absent = [...new Set([...missing, ...substituted.missing])]
   if (absent.length) {
