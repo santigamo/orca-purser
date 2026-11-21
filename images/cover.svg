@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <title>Purser: an agent asks for a key, you paste it in Orca, the agent uses it and its output shows only the name</title>
+  <!-- Text uses Barlow Condensed (SIL OFL, images/fonts) and the system monospace. Render with images/render.sh. -->
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0 H0 V40" fill="none" stroke="#E0E3F2" stroke-width="1"/>
+    </pattern>
+    <style>
+      .mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:26px;fill:#767676}
+      .code{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:25px;fill:#060606}
+      .ink{fill:#060606}
+      .blue{fill:#263FA9}
+      .disp{font-family:'Barlow Condensed','Arial Narrow',sans-serif}
+    </style>
+  </defs>
+  <rect width="1600" height="1000" fill="#F1F3F9"/>
+  <rect x="640" y="0" width="960" height="1000" fill="url(#grid)" opacity=".7"/>
+  <line x1="640" y1="0" x2="640" y2="1000" stroke="#E0E3F2" stroke-width="2"/>
+
+  <!-- left: wordmark -->
+  <text x="96" y="150" class="mono" letter-spacing="3">OPEN SOURCE</text>
+  <text x="88" y="400" class="disp ink" font-weight="700" font-size="196" letter-spacing="-3">Purser</text>
+  <text x="96" y="528" class="disp ink" font-weight="600" font-size="62">Your agents use the key.</text>
+  <text x="96" y="600" class="disp ink" font-weight="600" font-size="62">They never see it.</text>
+  <rect x="96" y="652" width="88" height="8" fill="#263FA9"/>
+  <text x="96" y="872" class="mono" style="font-size:23px">for Orca · Claude Code and Codex</text>
+
+  <!-- right: the flow, top to bottom -->
+  <text x="720" y="172" class="mono">1 · the agent asks</text>
+  <text x="720" y="222" class="code">$ purser need STRIPE_API_KEY</text>
+
+  <text x="720" y="322" class="mono">2 · you paste it in Orca</text>
+  <rect x="720" y="350" width="640" height="150" rx="14" fill="#FFFFFF" stroke="#263FA9" stroke-width="3"/>
+  <text x="752" y="396" class="code">STRIPE_API_KEY</text>
+  <rect x="752" y="418" width="430" height="54" rx="8" fill="#F1F3F9" stroke="#C9CEE3" stroke-width="2"/>
+  <text x="772" y="455" class="code" letter-spacing="4">••••••••••••••••</text>
+  <rect x="1200" y="418" width="128" height="54" rx="8" fill="#263FA9"/>
+  <text x="1264" y="454" class="code" text-anchor="middle" style="fill:#FFFFFF">Save</text>
+
+  <text x="720" y="600" class="mono">3 · it uses it by name</text>
+  <text x="720" y="650" class="code">$ purser run -- curl -u {{STRIPE_API_KEY}}: \</text>
+  <text x="780" y="690" class="code">https://api.stripe.com/v1/balance</text>
+
+  <text x="720" y="790" class="mono">4 · the output never shows it</text>
+  <text x="720" y="840" class="code">"key": "</text>
+  <text x="840" y="840" class="code blue" font-weight="700">[purser:STRIPE_API_KEY]</text>
+  <text x="1185" y="840" class="code">"</text>
+</svg>

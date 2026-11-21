@@ -18,6 +18,8 @@ let home = ''
 beforeEach(async () => {
   home = await realpath(await mkdtemp(join(tmpdir(), 'purser-')))
   process.env.PURSER_HOME_DIR = home
+  // Never reach the real Orca: the panel opener gets a command that answers nothing.
+  process.env.PURSER_ORCA_CLI = '/usr/bin/false'
   delete process.env.PURSER_SOCK
 })
 afterEach(async () => {

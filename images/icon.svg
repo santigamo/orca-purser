@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Purser</title>
+  <!-- A key whose bow is a life ring: the purser keeps the valuables on board.
+       Ring circumference 2·π·86 ≈ 540; four blue bands of 54 sit on the diagonals. -->
+  <rect width="512" height="512" fill="#F1F3F9"/>
+  <g transform="translate(0 0)">
+    <circle cx="170" cy="256" r="86" fill="none" stroke="#060606" stroke-width="50"/>
+    <circle cx="170" cy="256" r="86" fill="none" stroke="#263FA9" stroke-width="50"
+            stroke-dasharray="54 81" stroke-dashoffset="94"/>
+    <g fill="none" stroke="#060606" stroke-linecap="round" stroke-width="44">
+      <path d="M278 256 H446"/>
+      <path d="M446 256 V326"/>
+      <path d="M380 256 V306"/>
+    </g>
+  </g>
+</svg>

@@ -4,12 +4,23 @@
   "id": "purser",
   "name": "Purser",
   "version": "0.1.0",
-  "description": "Paste API keys into a masked field instead of the chat. Your agents use them by name and never see the values.",
+  "execution": "trusted-worker",
+  "description": "Paste API keys into a masked field instead of the chat. Claude Code, Codex and other agents use them by name, per project, and never see the values.",
+  "icon": "images/icon.png",
+  "cover": {
+    "path": "images/cover.png",
+    "alt": "An agent asks for STRIPE_API_KEY, you paste it into a masked field in Orca, and the output shows [purser:STRIPE_API_KEY] instead."
+  },
+  "author": {
+    "name": "Santi Gamo",
+    "url": "https://github.com/santigamo"
+  },
+  "homepage": "https://github.com/santigamo/orca-purser",
+  "repository": "https://github.com/santigamo/orca-purser",
   "license": "MIT",
   "engines": {
     "orca": ">=1.4.248"
   },
-  "execution": "trusted-worker",
   "pluginApi": 1,
   "main": "src/worker.ts",
   "contributes": {
@@ -72,9 +83,5 @@
     {
       "kind": "workspace:read"
     }
-  ],
-  "author": {
-    "name": "Santi Gamo",
-    "url": "https://github.com/santigamo"
-  }
+  ]
 }

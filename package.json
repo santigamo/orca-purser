@@ -2,17 +2,25 @@
   "name": "orca-purser",
   "version": "0.1.0",
   "private": true,
-  "description": "Orca plugin: paste API keys into a masked field instead of the chat; agents use them by name.",
+  "description": "Orca plugin: paste API keys into a masked field instead of the chat; agents use them by name and never see the values.",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "orca plugin test .",
     "typecheck": "tsc -p .",
-    "check": "orca plugin validate . && tsc -p . && orca plugin test . && orca plugin check ."
+    "check": "orca plugin validate . && tsc -p . && orca plugin test . && orca plugin check .",
+    "images": "sh images/render.sh"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
     "typescript": "5.6.3"
+  },
+  "author": "Santi Gamo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/santigamo/orca-purser.git"
   }
 }

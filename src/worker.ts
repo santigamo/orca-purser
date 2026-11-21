@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type { Server } from 'node:net'
 import type { OrcaWorkerApi } from 'orca/worker'
 import { withInstructions } from './launch'
+import { panelOpener } from './open-panel'
 import { cleanValue, nameProblem, normalizeName, referencesName } from './names'
 import type { AskRow, Project, PurserState } from './protocol'
 import { serve, stop, type Request } from './server'
@@ -37,6 +38,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   let server: Server | null = null
   let protection: PurserState['protection'] = 'os-keyring'
   let currentProject: Project | null = null
+  const openPanel = panelOpener((message) => orca.log(message))
 
   async function state(): Promise<PurserState> {
     await store.ready()
@@ -183,6 +185,8 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
           })
           .catch(() => undefined)
         await changed()
+        // Next to the conversation, with the field ready: no hunting for the panel.
+        void openPanel()
       }
       const waitingOn = ask
       // The request outlives this connection: if the command line gives up, the panel still asks.
