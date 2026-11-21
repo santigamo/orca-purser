@@ -87,6 +87,7 @@ test('new agents get exported secrets and the command path, nothing else', async
   assert.equal(env.NPM_TOKEN, 'npm_abcdef123456')
   assert.equal(env.STRIPE_API_KEY, undefined)
   assert.equal(env.PURSER_CLI, join(home, '.purser', 'bin', 'purser'))
+  assert.match(decision.kind === 'continue' ? decision.event.command : '', /^claude --append-system-prompt '.*PURSER_CLI/)
   await worker.deactivate()
 })
 

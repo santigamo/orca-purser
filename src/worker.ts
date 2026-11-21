@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Server } from 'node:net'
 import type { OrcaWorkerApi } from 'orca/worker'
+import { withInstructions } from './launch'
 import { cleanValue, nameProblem, normalizeName, referencesName } from './names'
 import type { AskRow, PurserState } from './protocol'
 import { serve, stop, type Request } from './server'
@@ -174,10 +175,15 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
 
   // --- Hooks ---------------------------------------------------------------------------------
 
-  // New agents get the secrets marked "export", and where the command lives. Reads memory only:
-  // a launch must never wait on the key store.
+  // New agents get the secrets marked "export", where the command lives, and how to use it, so
+  // nothing has to be installed for agents Orca starts. Reads memory only: a launch must never
+  // wait on the key store.
   orca.hooks.on('agent.launch.before', (event, next) =>
-    next({ ...event, env: { ...event.env, ...store.exportedValues(), PURSER_CLI: launcherPath() } })
+    next({
+      ...event,
+      command: withInstructions(event.agent, event.command),
+      env: { ...event.env, ...store.exportedValues(), PURSER_CLI: launcherPath() }
+    })
   )
 
   // Claude Code waits for this answer, so a command that reads a secret the shell does not have

@@ -225,13 +225,13 @@ function SetupSection({ current }: { current: PurserState }) {
   const anyInstalled = current.setup.some((item) => item.state !== 'missing')
   return (
     <Collapsible
-      title="Agent setup"
-      description={pending.length ? `${pending.length} to install` : 'Claude Code and Codex know how to use Purser'}
-      defaultOpen={pending.length > 0}
+      title="Agents outside Orca"
+      description={anyInstalled ? 'Command and skill installed' : 'Optional: agents Orca starts need nothing'}
+      defaultOpen={false}
     >
       <Stack gap="sm">
         <Text size="sm" muted>
-          A <Code>purser</Code> command and a skill that teaches agents to ask here instead of in the chat.
+          Claude Code and Codex started from Orca already know how to use Purser. For agents you start in another terminal, install a <Code>purser</Code> command and a skill.
         </Text>
         {current.setup.map((item) => (
           <Row key={item.id} justify="between" align="center" gap="sm">

@@ -21,11 +21,13 @@ agent:  purser run -- curl -H "Authorization: Bearer {{STRIPE_API_KEY}}" https:/
   environment, and replaces values (plain, base64, hex, URL-encoded) in its output.
 - **Asking.** `purser need NAME` shows a card in the panel and a desktop notification, then waits
   up to 90 s. If you take longer the ask stays open and the agent is told to run it again.
-- **Hooks.** `agent.launch.before` gives each new agent `$PURSER_CLI`, plus any secret you mark
-  "Give to every new agent". `agent.tool.before` stops a Claude Code Bash call that reads
+- **Nothing to install.** `agent.launch.before` gives each agent Orca starts `$PURSER_CLI`,
+  any secret you mark "Give to every new agent", and a short set of instructions: Claude Code
+  through `--append-system-prompt`, Codex through `-c developer_instructions=...` (skipped when
+  you already pass your own). `agent.tool.before` stops a Claude Code Bash call that reads
   `$NAME` its shell does not have, and tells it how to use `purser run` instead.
-- **Setup.** One button in the panel installs the `purser` command into `~/.local/bin` and a
-  skill into `~/.claude/skills` and `~/.agents/skills` (Codex). Remove undoes it.
+- **Agents outside Orca (optional).** A button in the panel installs the `purser` command into
+  `~/.local/bin` and a skill into `~/.claude/skills` and `~/.agents/skills`. Remove undoes it.
 
 ## What it does not protect against
 
